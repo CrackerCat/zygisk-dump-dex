@@ -1,10 +1,7 @@
-#![feature(naked_functions)]
-
 use dobby_rs::Address;
 use jni::JNIEnv;
 use log::{error, info, trace};
 use nix::{fcntl::OFlag, sys::stat::Mode};
-// use std::arch::asm;
 use std::arch::naked_asm;
 use std::{
     fs::File,
@@ -19,25 +16,20 @@ struct MyModule {
 }
 
 impl Module for MyModule {
-    fn new(api: Api, env: *mut jni_sys::JNIEnv) -> Self {
+    fn new(api: Api, env: *mut jni::sys::JNIEnv) -> Self {
         android_logger::init_once(
             android_logger::Config::default()
                 .with_max_level(log::LevelFilter::Info)
                 .with_tag("dump_dex"),
         );
-        let env = unsafe { JNIEnv::from_raw(env.cast()).unwrap() };
+        let env = unsafe { JNIEnv::from_raw(env).unwrap() };
         Self { api, env }
     }
     fn pre_app_specialize(&mut self, args: &mut AppSpecializeArgs) {
         let mut inner = || -> anyhow::Result<()> {
             let package_name = self
                 .env
-                .get_string(unsafe {
-                    (args.nice_name as *mut jni_sys::jstring as *mut ()
-                        as *const jni::objects::JString<'_>)
-                        .as_ref()
-                        .unwrap()
-                })?
+                .get_string(&unsafe { jni::objects::JString::from_raw(*args.nice_name) })?
                 .to_string_lossy()
                 .to_string();
             trace!("pre_app_specialize: package_name: {}", package_name);
@@ -91,11 +83,10 @@ impl Module for MyModule {
 register_zygisk_module!(MyModule);
 static mut OLD_OPEN_COMMON: usize = 0;
 
-#[naked]
+#[unsafe(naked)]
 pub extern "C" fn new_open_common_wrapper() {
-    unsafe {
-        naked_asm!(
-            r#"
+    naked_asm!(
+        r#"
             sub sp, sp, 0x280
             stp x29, x30, [sp, #0]
             stp x0, x1, [sp, #0x10]
@@ -118,11 +109,9 @@ pub extern "C" fn new_open_common_wrapper() {
             adrp x16, {old_open_common}
             ldr x16, [x16, #:lo12:{old_open_common}]
             br x16"#,
-            new_open_common = sym new_open_common,
-            old_open_common = sym OLD_OPEN_COMMON,
-            // options(noreturn)
-        );
-    }
+        new_open_common = sym new_open_common,
+        old_open_common = sym OLD_OPEN_COMMON,
+    );
 }
 
 extern "C" fn new_open_common(base: usize, size: usize) {

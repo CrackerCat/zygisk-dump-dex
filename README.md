@@ -1,6 +1,6 @@
 # Zygisk Dump Dex
 
-This repository is a demo project which hook `libdexfile.so` to dump dex. This is **only** test on my Android 14.
+This repository is a demo project which hook `libdexfile.so` to dump dex. This is **only** test on my Android 14 and 15.
 
 **⚠️⚠️Use it at your own risk.⚠️⚠️**
 
